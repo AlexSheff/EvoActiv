@@ -1,0 +1,63 @@
+# EvoActiv Default Configuration
+
+# Evolution parameters
+evolution:
+  population_size: 100
+  num_generations: 50
+  mutation_rate: 0.2
+  crossover_rate: 0.7
+  elitism_count: 5
+  tournament_size: 3
+  max_formula_depth: 5
+  
+# Operators configuration
+operators:
+  unary: ["sin", "cos", "exp", "log", "tanh", "sigmoid", "relu"]
+  binary: ["+", "-", "*", "/", "**"]
+  trainable_constants: true
+
+# Dataset parameters
+dataset:
+  type: "mnist"  # Options: mnist, custom_csv, custom_numpy
+  batch_size: 64
+  train_ratio: 0.8
+  data_dir: "../data"
+  
+  # Custom dataset parameters (used if type is custom_*)
+  custom:
+    file_path: ""
+    target_column: ""
+    feature_columns: []
+    X_path: ""
+    y_path: ""
+
+# Model parameters
+model:
+  hidden_layers: [128, 64]
+  dropout_rate: 0.2
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  epochs: 10
+  early_stopping_patience: 3
+
+# Formula optimization parameters
+formula_optimization:
+  enable: true
+  learning_rate: 0.01
+  epochs: 50
+  coefficient_range: [-5.0, 5.0]
+
+# Fine-tuning of top formulas after each generation
+fine_tuning:
+  enable: true
+  top_k: 3
+  extra_epochs: 5
+
+# Logging and output
+logging:
+  log_interval: 10  # Log every N generations
+  save_top_k: 5     # Save top K formulas
+  results_dir: "../results"
+  save_models: true
+  save_plots: true
+  verbose: true
