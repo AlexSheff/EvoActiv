@@ -43,7 +43,7 @@ EvoActiv/
 Requirements: Python 3.10+ and PyTorch.
 
 ```
-git clone https://github.com/yourusername/EvoActiv.git
+git clone https://github.com/AlexSheff/EvoActiv.git
 cd EvoActiv
 python -m venv .venv
 . .venv/Scripts/activate  # Windows PowerShell: . .venv\Scripts\Activate.ps1
