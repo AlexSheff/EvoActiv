@@ -1,0 +1,19 @@
+EvoActiv Analysis Report
+======================
+
+Best Formula: (relu(x) - cos(x))
+Best Fitness: 0.9686666666666667
+
+Generations: 3
+Last Generation Stats:
+  Avg: 0.49877777777777776, Min: 0.0, Max: 0.9686666666666667
+  Best overall: 0.9686666666666667, Diversity: 3
+
+Configuration:
+  evolution: {'population_size': 3, 'num_generations': 3, 'mutation_rate': 0.2, 'crossover_rate': 0.7, 'elitism_count': 5, 'tournament_size': 3, 'max_formula_depth': 5, 'seed': 42}
+  operators: {'unary': ['sin', 'cos', 'exp', 'log', 'tanh', 'sigmoid', 'relu'], 'binary': ['+', '-', '*', '/', '**'], 'trainable_constants': True}
+  dataset: {'type': 'mnist', 'batch_size': 64, 'train_ratio': 0.8, 'data_dir': '../data', 'custom': {'file_path': '', 'target_column': '', 'feature_columns': [], 'X_path': '', 'y_path': ''}}
+  model: {'hidden_layers': [128, 64], 'dropout_rate': 0.2, 'learning_rate': 0.001, 'weight_decay': 0.0001, 'epochs': 10, 'early_stopping_patience': 3}
+  formula_optimization: {'enable': True, 'mode': 'joint', 'learning_rate': 0.01, 'parameter_lr_mult': 10.0, 'epochs': 50, 'coefficient_range': [-5.0, 5.0]}
+  fine_tuning: {'enable': True, 'top_k': 3, 'extra_epochs': 5}
+  logging: {'log_interval': 10, 'save_top_k': 5, 'results_dir': '../results', 'save_models': True, 'save_plots': True, 'verbose': True}
