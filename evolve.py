@@ -9,6 +9,8 @@ import yaml
 import torch
 import json
 from datetime import datetime
+import random
+import numpy as np
 
 from evo_core.evolution import EvolutionEngine
 from evo_core.train_evaluator import create_and_evaluate_model
@@ -63,6 +65,20 @@ def main():
     # Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
+
+    # Set seeds for reproducibility
+    seed = config.get('evolution', {}).get('seed', None)
+    if seed is not None:
+        try:
+            seed = int(seed)
+        except Exception:
+            seed = 42
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+        print(f"Seed set to {seed}")
     
     # Load dataset
     print("Loading dataset...")

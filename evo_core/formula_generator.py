@@ -5,8 +5,22 @@ Handles creation and manipulation of formula syntax trees.
 
 import random
 import numpy as np
+import yaml
+import os
 from typing import List, Dict, Any, Tuple, Optional, Union
 from enum import Enum
+
+
+# Load configuration
+def load_config():
+    """Load configuration from default.yaml"""
+    config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config', 'default.yaml')
+    with open(config_path, 'r') as f:
+        return yaml.safe_load(f)
+
+
+# Get default configuration
+CONFIG = load_config()
 
 
 class NodeType(Enum):
@@ -59,9 +73,16 @@ class FormulaNode:
 class FormulaTree:
     """Represents a complete formula as a syntax tree."""
     
-    # Available operations for formula generation
-    UNARY_OPS = ["sin", "cos", "exp", "log", "tanh", "sigmoid", "relu"]
-    BINARY_OPS = ["+", "-", "*", "/", "**"]
+    # Get available operations from configuration
+    @staticmethod
+    def get_operators():
+        """Get operators from configuration"""
+        unary_ops = CONFIG.get('operators', {}).get('unary', ["sin", "cos", "exp", "log", "tanh", "sigmoid", "relu"])
+        binary_ops = CONFIG.get('operators', {}).get('binary', ["+", "-", "*", "/", "**"])
+        return unary_ops, binary_ops
+    
+    # Available operations for formula generation (loaded from config)
+    UNARY_OPS, BINARY_OPS = get_operators()
     
     def __init__(self, root: FormulaNode = None):
         """
@@ -106,8 +127,13 @@ class FormulaTree:
         # At max depth or randomly at lower depths, create a leaf node
         if depth >= max_depth or (depth > 0 and random.random() < p_leaf):
             if random.random() < p_constant:
-                # Generate random constant between -3 and 3
-                value = random.uniform(-3, 3)
+                # Generate random constant using coefficient_range from config
+                coef_range = CONFIG.get('formula_optimization', {}).get('coefficient_range', [-3.0, 3.0])
+                try:
+                    low, high = float(coef_range[0]), float(coef_range[1])
+                except Exception:
+                    low, high = -3.0, 3.0
+                value = random.uniform(low, high)
                 node = FormulaNode(NodeType.CONSTANT, value)
             else:
                 # Use the variable

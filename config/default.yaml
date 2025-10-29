@@ -9,6 +9,7 @@ evolution:
   elitism_count: 5
   tournament_size: 3
   max_formula_depth: 5
+  seed: 42
   
 # Operators configuration
 operators:
@@ -43,7 +44,9 @@ model:
 # Formula optimization parameters
 formula_optimization:
   enable: true
+  mode: joint  # options: joint, finetune_only, none
   learning_rate: 0.01
+  parameter_lr_mult: 10.0
   epochs: 50
   coefficient_range: [-5.0, 5.0]
 

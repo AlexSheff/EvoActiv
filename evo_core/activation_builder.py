@@ -149,7 +149,12 @@ class ActivationModule(nn.Module):
         
         # Check if trainable_constants is specified, otherwise use config
         if trainable_constants is None:
-            trainable_constants = CONFIG.get('formula_optimization', {}).get('enable', False)
+            # Prefer operators.trainable_constants if present, otherwise fallback to formula_optimization.enable
+            tc_from_ops = CONFIG.get('operators', {}).get('trainable_constants', None)
+            if tc_from_ops is not None:
+                trainable_constants = bool(tc_from_ops)
+            else:
+                trainable_constants = CONFIG.get('formula_optimization', {}).get('enable', False)
         
         self.trainable_constants = trainable_constants
         
@@ -159,6 +164,8 @@ class ActivationModule(nn.Module):
         # Register parameters with the module
         for i, param in enumerate(self.params):
             self.register_parameter(f'param_{i}', param)
+        if self.params:
+            print("ActivationModule params_init:", {f'param_{i}': float(p.item()) for i, p in enumerate(self.params)})
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """

@@ -4,25 +4,25 @@ Evolutionary discovery and optimization of activation functions for neural netwo
 
 ## Overview
 
-EvoActiv is a research tool that uses evolutionary search to discover novel activation formulas for neural networks. It builds expression trees, mutates and crosses them, and evaluates candidate formulas by training a simple model on a dataset (MNIST by default). Beyond standard functions like ReLU, sigmoid, or tanh, EvoActiv explores composite and parametric formulas that can be trained alongside the model.
+EvoActiv uses evolutionary search to discover novel activation formulas for neural networks. It builds expression trees, mutates and crosses them, and evaluates candidate formulas by training a simple model on a dataset (MNIST by default). Beyond standard functions like ReLU, sigmoid, or tanh, EvoActiv explores composite and parametric formulas that can be trained alongside the model.
 
-## Key Features
+## Highlights
 
 - Evolutionary search of activation formulas using genetic programming.
-- Parametric constants inside formulas (e.g., `a`, `b`) trained via PyTorch optimizers.
-- Safe numerical implementations (clamping, eps additions) to avoid NaNs and infs.
-- Configurable operator set via `config/default.yaml` (enable/disable unary and binary ops).
-- Joint training of model weights and formula parameters during evaluation.
-- Early stopping, logging of best formula and fitness, saving results to JSON.
-- CPU/GPU support via PyTorch (automatically selects `cuda` if available).
+- Trainable numeric constants in formulas (become `nn.Parameter`s).
+- Operator set fully configurable via `config/default.yaml`.
+- Configurable formula optimization modes: `joint`, `finetune_only`, `none`.
+- Safe activation validation to reject NaN/Inf values and bad gradients.
+- Early stopping, logging, and JSON results with parameter traces.
+- CPU/GPU support via PyTorch; automatic device selection.
 - Result analysis script to visualize and compare top formulas.
 
 ## Project Structure
 
 ```
 EvoActiv/
-├── data/                     # Datasets (MNIST, examples)
-├── results/                  # JSON, plots, models
+├── data/                     # Datasets (created on first run)
+├── results/                  # JSON, plots, models (created on run)
 ├── evo_core/                 # Core logic
 │   ├── evolution.py          # Evolution engine: mutation, crossover
 │   ├── formula_generator.py  # Expression tree generator
@@ -50,11 +50,11 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-Notes:
-- If you encounter NumPy compatibility issues, pin `numpy<2` in `requirements.txt`.
-- MNIST will be downloaded automatically to `data/` on first run.
+Dependency notes:
+- Versions are pinned for compatibility: `numpy>=1.25,<2.0`, `torch>=2.0,<3.0`, `torchvision>=0.15,<0.16`.
+- MNIST and other torchvision datasets are downloaded on first run.
 
-## Quickstart
+## Quick Start
 
 Run a small evolutionary search with default settings:
 
@@ -62,76 +62,87 @@ Run a small evolutionary search with default settings:
 python evolve.py --config config/default.yaml --output results
 ```
 
-Run a faster smoke test:
+Run a fast smoke test (1 generation, tiny population):
 
 ```
-python evolve.py --config config/default.yaml --generations 2 --population 5
+python evolve.py --config config/default.yaml --generations 1 --population_size 1
 ```
 
 Increase search quality (more exploration):
 
 ```
-python evolve.py --config config/default.yaml --generations 50 --population 100
+python evolve.py --config config/default.yaml --generations 50 --population_size 100
 ```
 
-## Usage Examples
+## Configuration Reference
 
-### 1) Configure Operators
-
-Enable or disable available operators via YAML. For example:
-
-```yaml
-operators:
-  unary: ["sin", "cos", "exp", "log", "tanh", "sigmoid", "relu"]
-  binary: ["+", "-", "*", "/", "**"]
-  trainable_constants: true
-```
-
-- Unary ops include `sin`, `cos`, `exp`, `log`, `tanh`, `sigmoid`, `relu`.
-- Binary ops include `+`, `-`, `*`, `/`, `**` (power uses clamping/eps for stability).
-- `trainable_constants: true` allows numeric constants in formulas to become `nn.Parameter` during training.
-
-### 2) Fine-Tune Formula Parameters
-
-Enable joint training of formula constants with the model via the `formula_optimization` block:
+The full experiment is controlled by `config/default.yaml`.
 
 ```yaml
 evolution:
   population_size: 100
   num_generations: 50
+  mutation_rate: 0.2
+  crossover_rate: 0.7
+  elitism_count: 5
+  tournament_size: 3
+  max_formula_depth: 5
+  seed: 42
 
-# Optimization of numeric coefficients within formulas
+operators:
+  unary: ["sin", "cos", "exp", "log", "tanh", "sigmoid", "relu"]
+  binary: ["+", "-", "*", "/", "**"]
+  trainable_constants: true
+
+dataset:
+  type: "mnist"        # Options: mnist, torchvision, custom
+  batch_size: 64
+  train_ratio: 0.8
+  data_dir: "../data"
+
+model:
+  hidden_layers: [128, 64]
+  dropout_rate: 0.2
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  epochs: 10
+  early_stopping_patience: 3
+
 formula_optimization:
-  enable: true
-  learning_rate: 1e-3
-  epochs: 3           # number of additional fine-tuning epochs per evaluation
-  coefficient_range: [-2.0, 2.0]
-```
+  enable: true          # Enables trainable constants in formulas
+  mode: joint           # Options: joint, finetune_only, none
+  learning_rate: 0.01   # LR for formula params (if set)
+  parameter_lr_mult: 10.0  # Multiplier relative to model LR (if LR not set)
+  epochs: 50            # Fine-tuning epochs when enabled
+  coefficient_range: [-5.0, 5.0]  # Initial constant range for generation
 
-With `enable: true`, EvoActiv creates `nn.Parameter`s for constants detected in an expression and optimizes them along with the network weights during evaluation. This is handled inside `train_evaluator.py` and `activation_builder.py`.
-
-### 3) Post-Generation Fine-Tuning (Top-K)
-
-Enable automatic fine-tuning of the best formulas after each generation:
-
-```yaml
-# Automatic fine-tuning of top formulas after each generation
 fine_tuning:
-  enable: true        # Enable post-generation fine-tuning
-  top_k: 3            # Number of best formulas to fine-tune
-  extra_epochs: 5     # Additional training epochs for fine-tuning
+  enable: true
+  top_k: 3
+  extra_epochs: 5
+
+logging:
+  log_interval: 10
+  save_top_k: 5
+  results_dir: "../results"
+  save_models: true
+  save_plots: true
+  verbose: true
 ```
 
-When enabled, EvoActiv will:
-- Select the top-K formulas from each generation based on fitness
-- Perform additional training epochs on each formula
-- Log improvements in fitness and formula parameters
-- Keep the improved versions for the next generation
-- Save fine-tuning logs in the results file for analysis
+Key points:
+- `operators` define the available unary/binary operations used in formula generation.
+- `trainable_constants` controls whether numeric constants become parameters during training.
+- `coefficient_range` governs the initial constant values during random tree generation.
+- `formula_optimization.mode` selects training strategy:
+  - `joint`: train model and activation parameters together.
+  - `finetune_only`: freeze model, optimize only activation parameters.
+  - `none`: disable trainable constants.
+- `seed` ensures reproducible runs across `random`, `numpy`, and `torch`.
 
-### 4) Dataset Configuration (Universal Loader)
+## Dataset Configuration (Universal Loader)
 
-Switch dataset type or point to a custom CSV/JSON/NumPy dataset in `config/default.yaml`. Examples:
+Switch dataset type or point to a custom CSV/JSON/NumPy dataset.
 
 Torchvision:
 ```yaml
@@ -175,80 +186,32 @@ dataset:
 ```
 
 Notes:
-- For legacy `type: mnist`, use `type: torchvision` and `name: mnist`.
+- Legacy `type: mnist` is supported; prefer `type: torchvision` + `name: mnist`.
 - NumPy `.npz` files should contain arrays under keys `X` and `y`.
-
-### 5) Model Settings
-
-Adjust model architecture, optimizer, and training parameters under `model`:
-
-```yaml
-model:
-  hidden_layers: [128, 64]
-  dropout: 0.1
-  learning_rate: 1e-3
-  epochs: 10
-  early_stopping_patience: 3
-```
 
 ## How It Works
 
-- EvoActiv generates candidate formulas as expression trees and compiles them to PyTorch functions (`activation_builder.py`).
-- Safety wrappers (clamp, eps) are used in `log`, `/`, and `**` to keep training numerically stable.
-- Each formula is evaluated by training a small `SimpleNet` on a dataset (`train_evaluator.py`).
-- If `formula_optimization.enable` is set, constants in the formula become trainable parameters and are optimized jointly with the model weights.
-- Evolution (`evo_core/evolution.py`) runs mutation, crossover, and selection, tracking the best formula by validation accuracy.
+- EvoActiv generates candidate formulas as expression trees and compiles them to PyTorch modules (`activation_builder.py`).
+- Safety check validates each activation on a random batch to reject NaN/Inf or bad gradients.
+- Each formula is evaluated by training `SimpleNet` on the chosen dataset (`train_evaluator.py`).
+- If formula optimization is enabled, constants become trainable parameters and are optimized according to the selected `mode`.
+- Evolution (`evo_core/evolution.py`) runs mutation, crossover, selection, and logs per-generation stats (fitness and diversity).
 
 ## Results and Analysis
 
 - Each run saves a JSON summary under `results/`, e.g. `results_YYYYMMDD_HHMMSS.json`.
 - Aggregated best formulas are appended to `results/formulas.json`.
-- You can analyze results:
+- Analyze results:
 
 ```
 python analyze_results.py --results results/results_YYYYMMDD_HHMMSS.json --output results
 ```
 
-## Tips
+## Troubleshooting
 
-- For reproducibility, set seeds and deterministic flags if needed.
-- For better search quality, increase `num_generations` and `population_size`.
-- Ensure GPU drivers and CUDA-enabled PyTorch if you want faster training.
-
-## Universal Dataset Loader
-
-In `config/default.yaml`, define the `dataset` section, for example:
-
-- CSV:
-  - `type: custom`
-  - `path: data/train.csv`
-  - `input_columns: ["x1","x2","x3"]`
-  - `target_column: "y"`
-  - `batch_size: 128`
-  - `train_ratio: 0.8`
-- JSON:
-  - `type: custom`
-  - `path: data/data.json`
-  - `json_input_key: "inputs"` (list of arrays)
-  - `json_target_key: "targets"` (list of values or arrays)
-- NumPy:
-  - `type: custom`
-  - `path: data/dataset.npz`
-  - keys inside file: `X` and `y`
-- Torchvision:
-  - `type: torchvision`
-  - `name: mnist` or `fashionmnist` or `cifar10`
-  - `data_dir: data/torchvision`
-  - `batch_size: 128`
-  - `train_ratio: 0.8`
-
-For legacy configs using `type: mnist`, use `type: torchvision` with `name: mnist`.
-
-## Visualizations
-
-- The `analyze_results.py` script plots fitness and diversity from saved history. Run:
-  - `python analyze_results.py --results results/results_YYYYMMDD_HHMMSS.json`
-- Plots are saved under `results/` (git-ignored), convenient for local analysis.
+- NumPy 2.0 incompatibility: dependencies are pinned to `numpy<2.0` in `requirements.txt` to avoid known issues.
+- If dataset download fails, check network and `data_dir` paths; retry after clearing partial downloads.
+- If training is slow, reduce `model.epochs`, `batch_size`, or run with `--generations 1 --population_size 1`.
 
 ## License
 

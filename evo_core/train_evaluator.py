@@ -72,9 +72,34 @@ def create_and_evaluate_model(formula: FormulaTree,
     # Extract dataset
     train_loader, val_loader = dataset
     
+    # Formula optimization mode: joint | finetune_only | none
+    fo_cfg = config.get('formula_optimization', {})
+    mode = fo_cfg.get('mode', 'joint')
     # Create activation function with trainable constants if enabled
-    trainable_constants = config.get('formula_optimization', {}).get('enable', False)
+    # Prefer formula_optimization.enable, fallback to operators.trainable_constants
+    trainable_constants = fo_cfg.get('enable', config.get('operators', {}).get('trainable_constants', False))
+    if mode == 'none':
+        trainable_constants = False
     activation_module = ActivationModule(formula, trainable_constants=trainable_constants)
+
+    # Set device early for safety checks and model placement
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Safety check: validate activation on a small random batch to avoid NaN/Inf
+    try:
+        test_x = torch.randn(16, 784, device=device, requires_grad=True)
+        # Pass through one linear layer + activation to simulate typical usage
+        test_layer = nn.Linear(784, 32).to(device)
+        with torch.enable_grad():
+            y = activation_module(test_layer(test_x))
+            # Sum and backprop to check gradients
+            y.sum().backward()
+        if not torch.isfinite(y).all() or not torch.isfinite(test_x.grad).all():
+            print(f"Activation produced non-finite values or gradients: {activation_module}")
+            return 0.0 if not config.get('return_formula_string', False) else (0.0, str(formula))
+    except Exception as e:
+        print(f"Activation safety check failed for {formula}: {e}")
+        return 0.0 if not config.get('return_formula_string', False) else (0.0, str(formula))
     
     # Create model
     model = SimpleNet(
@@ -83,35 +108,41 @@ def create_and_evaluate_model(formula: FormulaTree,
         dropout_rate=config.get('dropout_rate', 0.2)
     )
     
-    # Set device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # Place model on device
     model.to(device)
     
     # Define loss function and optimizer
     criterion = nn.CrossEntropyLoss()
     
-    # Combine model parameters with activation parameters if trainable
-    if trainable_constants and activation_module.get_params():
-        # Get formula optimization config
-        formula_opt_config = config.get('formula_optimization', {})
-        formula_lr = formula_opt_config.get('learning_rate', 0.01)
-        
-        # Create parameter groups with different learning rates
-        param_groups = [
-            {'params': model.parameters(), 'lr': config.get('learning_rate', 0.001)},
-            {'params': activation_module.get_params(), 'lr': formula_lr}
-        ]
-        optimizer = optim.Adam(
-            param_groups,
-            weight_decay=config.get('weight_decay', 0.0001)
-        )
-    else:
-        # Standard optimizer with only model parameters
-        optimizer = optim.Adam(
-            model.parameters(),
-            lr=config.get('learning_rate', 0.001),
-            weight_decay=config.get('weight_decay', 0.0001)
-        )
+    # Optimizer setup based on mode
+    base_lr = config.get('learning_rate', 0.001)
+    weight_decay = config.get('weight_decay', 0.0001)
+    formula_opt_config = fo_cfg
+    formula_lr = formula_opt_config.get('learning_rate', base_lr)
+    # Optional multiplier relative to base lr
+    lr_mult = formula_opt_config.get('parameter_lr_mult', 1.0)
+    formula_lr = formula_lr if 'learning_rate' in formula_opt_config else base_lr * lr_mult
+
+    if mode == 'joint':
+        if trainable_constants and activation_module.get_params():
+            param_groups = [
+                {'params': model.parameters(), 'lr': base_lr},
+                {'params': activation_module.get_params(), 'lr': formula_lr}
+            ]
+            optimizer = optim.Adam(param_groups, weight_decay=weight_decay)
+        else:
+            optimizer = optim.Adam(model.parameters(), lr=base_lr, weight_decay=weight_decay)
+    elif mode == 'finetune_only':
+        # Freeze model, optimize only activation params
+        for p in model.parameters():
+            p.requires_grad = False
+        if trainable_constants and activation_module.get_params():
+            optimizer = optim.Adam(activation_module.get_params(), lr=formula_lr, weight_decay=0.0)
+        else:
+            # No trainable params: fallback to standard
+            optimizer = optim.Adam(model.parameters(), lr=base_lr, weight_decay=weight_decay)
+    else:  # none
+        optimizer = optim.Adam(model.parameters(), lr=base_lr, weight_decay=weight_decay)
     
     # Training loop
     epochs = config.get('epochs', 5)
@@ -144,6 +175,7 @@ def create_and_evaluate_model(formula: FormulaTree,
             outputs = model(inputs)
             loss = criterion(outputs, targets)
             
+            # Backward pass and optimize
             # Backward pass and optimize
             loss.backward()
             optimizer.step()
