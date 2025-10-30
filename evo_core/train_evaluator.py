@@ -17,7 +17,11 @@ from evo_core.formula_generator import FormulaTree
 class SimpleNet(nn.Module):
     """Simple neural network for testing activation functions."""
     
-    def __init__(self, activation_fn, hidden_layers: List[int] = [128, 64], dropout_rate: float = 0.2):
+    def __init__(self, activation_fn,
+                 hidden_layers: List[int] = [128, 64],
+                 dropout_rate: float = 0.2,
+                 input_size: int = 784,
+                 output_size: int = 10):
         """
         Initialize the network.
         
@@ -25,23 +29,24 @@ class SimpleNet(nn.Module):
             activation_fn: Activation function to use
             hidden_layers: List of hidden layer sizes
             dropout_rate: Dropout probability
+            input_size: Number of input features (flattened)
+            output_size: Number of output classes/units
         """
         super().__init__()
         
         self.layers = nn.ModuleList()
-        
-        # Input layer (MNIST: 28x28 = 784)
-        input_size = 784
+        self.input_size = input_size
+        self.output_size = output_size
         
         # Hidden layers
         for hidden_size in hidden_layers:
-            self.layers.append(nn.Linear(input_size, hidden_size))
+            self.layers.append(nn.Linear(self.input_size, hidden_size))
             self.layers.append(activation_fn)
             self.layers.append(nn.Dropout(dropout_rate))
-            input_size = hidden_size
+            self.input_size = hidden_size
         
-        # Output layer (MNIST: 10 classes)
-        self.layers.append(nn.Linear(input_size, 10))
+        # Output layer
+        self.layers.append(nn.Linear(self.input_size, self.output_size))
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the network."""
@@ -85,11 +90,30 @@ def create_and_evaluate_model(formula: FormulaTree,
     # Set device early for safety checks and model placement
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    # Determine input_size and output_size from a sample batch
+    try:
+        sample_inputs, sample_targets = next(iter(train_loader))
+    except Exception:
+        # Fallback defaults
+        sample_inputs = torch.randn(16, 1, 28, 28)
+        sample_targets = torch.zeros(16, dtype=torch.long)
+
+    input_size = int(np.prod(sample_inputs.shape[1:]))
+    # Determine output_size heuristically
+    try:
+        # Classification: number of unique labels in sample
+        output_size = int(torch.unique(sample_targets).numel())
+        if output_size <= 1:
+            # Fallback to config or default
+            output_size = int(config.get('num_classes', 10))
+    except Exception:
+        output_size = int(config.get('num_classes', 10))
+
     # Safety check: validate activation on a small random batch to avoid NaN/Inf
     try:
-        test_x = torch.randn(16, 784, device=device, requires_grad=True)
+        test_x = torch.randn(16, input_size, device=device, requires_grad=True)
         # Pass through one linear layer + activation to simulate typical usage
-        test_layer = nn.Linear(784, 32).to(device)
+        test_layer = nn.Linear(input_size, 32).to(device)
         with torch.enable_grad():
             y = activation_module(test_layer(test_x))
             # Sum and backprop to check gradients
@@ -105,7 +129,9 @@ def create_and_evaluate_model(formula: FormulaTree,
     model = SimpleNet(
         activation_fn=activation_module,
         hidden_layers=config.get('hidden_layers', [128, 64]),
-        dropout_rate=config.get('dropout_rate', 0.2)
+        dropout_rate=config.get('dropout_rate', 0.2),
+        input_size=input_size,
+        output_size=output_size,
     )
     
     # Place model on device

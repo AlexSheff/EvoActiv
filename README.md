@@ -216,3 +216,39 @@ python analyze_results.py --results results/results_YYYYMMDD_HHMMSS.json --outpu
 ## License
 
 This project is licensed under the MIT License. See the `LICENSE` file for details.
+## Testing
+
+Run the test suite with pytest:
+
+```
+pytest
+```
+
+Tests cover:
+- Formula generation primitives (`FormulaTree.random_tree`, `mutate`, `crossover`).
+- Compilation of simple formulas to PyTorch functions (e.g., `sin(x)`, `(x + 1.0)`), including `trainable_constants` behavior.
+
+PyTest is included in `requirements.txt`. Ensure your virtual environment is active.
+
+## Visualization
+
+Result analysis uses a parser + compiler pipeline to visualize any evolved formula:
+- `evo_core/utils.py` provides `visualize_formula_from_string(formula_str)` which:
+  - Parses the string via SymPy into an expression tree.
+  - Converts it to `FormulaTree` and compiles to a Torch activation.
+  - Evaluates on `x ∈ [-5, 5]` and returns a Matplotlib figure.
+- `analyze_results.py` uses this function to save `formula_plot.png`.
+
+Examples:
+```
+python analyze_results.py --results results/results_YYYYMMDD_HHMMSS.json --output analysis
+```
+
+## Flexible Model IO
+
+`SimpleNet` is now flexible to input and output dimensions:
+- Constructor accepts `input_size: int` and `output_size: int`.
+- `create_and_evaluate_model` infers `input_size` from a sample batch (`inputs.shape[1:]`).
+- `output_size` is inferred heuristically from unique labels in the sample batch or falls back to `config.num_classes`.
+
+This enables evaluating formulas on non-MNIST datasets with different input shapes and class counts.

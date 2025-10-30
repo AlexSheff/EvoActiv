@@ -19,63 +19,18 @@ def load_results(results_file):
 
 
 def plot_formula(formula_str, output_path):
-    """Plot the activation function curve."""
+    """Plot the activation function curve via parser + compiler."""
+    from evo_core.utils import visualize_formula_from_string
     try:
-        # Import required modules
-        from evo_core.formula_generator import FormulaTree
-        from evo_core.activation_builder import compile_formula_to_torch
-        
-        # Parse the formula string back to a FormulaTree
-        # Note: This requires implementing a parser or storing the tree object
-        # For now, we'll create a simple visualization
-        print(f"Formula to visualize: {formula_str}")
-        
-        # Create x values from -5 to 5
-        x = np.linspace(-5, 5, 1000)
-        x_tensor = torch.FloatTensor(x).reshape(-1, 1)
-        
-        # Try to evaluate the formula if possible
-        # This is a simplified approach - ideally we'd have the FormulaTree object
-        try:
-            # For demonstration, create some common activation functions
-            if 'tanh' in formula_str.lower():
-                y = np.tanh(x)
-            elif 'relu' in formula_str.lower():
-                y = np.maximum(0, x)
-            elif 'sigmoid' in formula_str.lower():
-                y = 1 / (1 + np.exp(-np.clip(x, -500, 500)))
-            elif 'sin' in formula_str.lower():
-                y = np.sin(x)
-            elif 'cos' in formula_str.lower():
-                y = np.cos(x)
-            else:
-                # Default to a simple function
-                y = np.tanh(x)
-        except Exception as e:
-            print(f"Error evaluating formula: {e}")
-            y = np.tanh(x)  # Fallback
-        
-        # Create the plot
-        plt.figure(figsize=(10, 6))
-        plt.plot(x, y, linewidth=2, color='blue')
-        plt.grid(True, alpha=0.3)
-        plt.axhline(y=0, color='k', linestyle='-', alpha=0.3)
-        plt.axvline(x=0, color='k', linestyle='-', alpha=0.3)
-        plt.title(f"Activation Function: {formula_str}")
-        plt.xlabel('x')
-        plt.ylabel('f(x)')
-        
-        # Save the plot
-        plt.savefig(output_path, dpi=150, bbox_inches='tight')
-        plt.close()
+        fig = visualize_formula_from_string(formula_str)
+        fig.savefig(output_path, dpi=150, bbox_inches='tight')
+        plt.close(fig)
         print(f"Formula plot saved to {output_path}")
-        
     except Exception as e:
-        print(f"Error plotting formula: {e}")
-        # Create a simple placeholder plot
+        print(f"Error plotting formula using parser/compiler: {e}")
         plt.figure(figsize=(10, 6))
-        plt.text(0.5, 0.5, f"Formula: {formula_str}\n(Visualization not available)", 
-                ha='center', va='center', transform=plt.gca().transAxes, fontsize=12)
+        plt.text(0.5, 0.5, f"Formula: {formula_str}\n(Visualization not available)",
+                 ha='center', va='center', transform=plt.gca().transAxes, fontsize=12)
         plt.title("Activation Function Visualization")
         plt.savefig(output_path)
         plt.close()

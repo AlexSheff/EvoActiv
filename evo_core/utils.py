@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-from evo_core.formula_generator import FormulaTree
+from evo_core.formula_generator import FormulaTree, FormulaNode, NodeType
 
 
 def log_generation_stats(generation: int, 
@@ -154,7 +154,7 @@ def visualize_formula(formula: FormulaTree, output_path: str) -> None:
     x_tensor = torch.FloatTensor(x).reshape(-1, 1)
     
     # Compile the formula to a PyTorch function
-    activation_fn = compile_formula_to_torch(formula)
+    activation_fn, _ = compile_formula_to_torch(formula)
     
     # Evaluate the function
     with torch.no_grad():
@@ -173,3 +173,97 @@ def visualize_formula(formula: FormulaTree, output_path: str) -> None:
     # Save the plot
     plt.savefig(output_path)
     plt.close()
+
+
+def parse_formula_string_to_tree(formula_str: str) -> FormulaTree:
+    """
+    Parse a formula string into a FormulaTree using sympy as an intermediate representation.
+
+    Supports unary ops: sin, cos, exp, log, tanh, sigmoid, relu
+    Supports binary ops: +, -, *, ** (division represented via multiplication with reciprocal if present)
+    """
+    from sympy import sympify, Symbol, Function
+
+    x = Symbol('x')
+    # Register custom functions that are not built-in sympy
+    relu = Function('relu')
+    sigmoid = Function('sigmoid')
+
+    expr = sympify(formula_str, locals={'x': x, 'relu': relu, 'sigmoid': sigmoid})
+
+    def to_node(e) -> FormulaNode:
+        # Variable
+        if getattr(e, 'name', None) == 'x' and e.is_Symbol:
+            return FormulaNode(NodeType.VARIABLE, 'x')
+
+        # Numeric constant
+        if hasattr(e, 'is_Number') and e.is_Number:
+            return FormulaNode(NodeType.CONSTANT, float(e))
+
+        # Unary functions
+        if hasattr(e, 'func') and hasattr(e, 'args') and len(e.args) == 1:
+            fname = str(e.func.__name__).lower()
+            if fname in {"sin", "cos", "exp", "log", "tanh", "sigmoid", "relu"}:
+                return FormulaNode(NodeType.UNARY_OP, fname, left=to_node(e.args[0]))
+
+        # Binary operations and multi-arg reductions
+        # Addition: fold args left-associatively using '+'
+        if hasattr(e, 'is_Add') and e.is_Add:
+            args = list(e.args)
+            n = to_node(args[0])
+            for a in args[1:]:
+                n = FormulaNode(NodeType.BINARY_OP, '+', left=n, right=to_node(a))
+            return n
+
+        # Multiplication: fold using '*'
+        if hasattr(e, 'is_Mul') and e.is_Mul:
+            args = list(e.args)
+            n = to_node(args[0])
+            for a in args[1:]:
+                n = FormulaNode(NodeType.BINARY_OP, '*', left=n, right=to_node(a))
+            return n
+
+        # Power: assume binary '**'
+        if hasattr(e, 'is_Pow') and e.is_Pow:
+            base, exp = e.as_base_exp()
+            return FormulaNode(NodeType.BINARY_OP, '**', left=to_node(base), right=to_node(exp))
+
+        # Fallback: try to interpret as a function call with any name
+        if hasattr(e, 'func') and hasattr(e, 'args') and len(e.args) == 1:
+            fname = str(e.func.__name__)
+            return FormulaNode(NodeType.UNARY_OP, fname, left=to_node(e.args[0]))
+
+        raise ValueError(f"Unsupported expression for parsing: {e}")
+
+    root = to_node(expr)
+    return FormulaTree(root)
+
+
+def visualize_formula_from_string(formula_str: str, trainable_constants: bool = False):
+    """
+    Build a matplotlib figure visualizing the formula provided as string.
+    Parses the string into a FormulaTree, compiles it, evaluates on a grid, and returns the figure.
+    """
+    import torch
+    from evo_core.activation_builder import compile_formula_to_torch
+
+    tree = parse_formula_string_to_tree(formula_str)
+
+    x = np.linspace(-5, 5, 1000)
+    x_tensor = torch.FloatTensor(x).reshape(-1, 1)
+    activation_fn, _ = compile_formula_to_torch(tree, trainable_constants=trainable_constants)
+
+    with torch.no_grad():
+        y = activation_fn(x_tensor).numpy()
+
+    fig = plt.figure(figsize=(10, 6))
+    ax = fig.add_subplot(1, 1, 1)
+    ax.plot(x, y, linewidth=2)
+    ax.grid(True, alpha=0.3)
+    ax.axhline(y=0, color='k', linestyle='-', alpha=0.3)
+    ax.axvline(x=0, color='k', linestyle='-', alpha=0.3)
+    ax.set_title(f"Activation Function: {formula_str}")
+    ax.set_xlabel('x')
+    ax.set_ylabel('f(x)')
+
+    return fig
